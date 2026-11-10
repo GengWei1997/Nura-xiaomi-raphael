@@ -1,0 +1,104 @@
+# Reference: <https://postmarketos.org/vendorkernel>
+# Kernel config based on: arch/arm64/configs/defconfig
+maintainer="GengWei1997 <gw19970326@gmail.com>"
+pkgname=linux-xiaomi-raphael
+pkgver=7.3
+pkgrel=0
+pkgdesc="Mainline Linux for the Xiaomi Redmi K20 Pro"
+arch="aarch64"
+_carch="arm64"
+_flavor="xiaomi-raphael"
+url="https://github.com/GengWei1997/linux"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps
+	pmb:cross-native
+	pmb:kconfigcheck-community
+	"
+makedepends="
+	bison
+	clang
+	elfutils-dev
+	findutils
+	flex
+	linux-headers
+	lld
+	llvm
+	openssl-dev
+	pahole
+	perl
+	postmarketos-installkernel
+	python3
+	zstd
+"
+
+# The kernel comes from a commit tarball like every other pmaports package,
+# so a build needs no local checkout.
+#
+# config-xiaomi-raphael.aarch64 is generated, never edited by hand.  It is
+# the merge of arch/arm64/configs/defconfig, the pmos.config that
+# kconfigcheck derives from this package's options=, and raphael.config,
+# resolved by
+#
+#     pmbootstrap kconfig generate xiaomi-raphael
+#
+# Then bump _commit if needed and let that command refresh sha512sums.
+# raphael.config and pmos.config are deliberately *not* in source=: they are
+# inputs to that command, which reads them from this aport, not something the
+# build itself needs.
+_defconfig="defconfig"
+_commit="8611da353242a435dacb39444c8d5912eac1d27b"
+source="
+	config-$_flavor.$arch
+	$pkgname-$_commit.tar.gz::$url/archive/$_commit.tar.gz
+"
+builddir="$srcdir/linux-$_commit"
+
+prepare() {
+	default_prepare
+	cp -v "$srcdir"/config-$_flavor.$arch .config
+}
+
+build() {
+	unset LDFLAGS
+	make ARCH="$_carch" LLVM=1 \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor"
+}
+
+package() {
+	mkdir -p "$pkgdir"/boot
+
+	if [ -e "$builddir/arch/$_carch/boot/vmlinuz.efi" ]; then
+		# ZBOOT EFI decompressor, needed for UEFI booting (the ESP setup)
+		install -Dm644 "$builddir/arch/$_carch/boot/vmlinuz.efi" \
+			"$pkgdir/boot/linux.efi"
+		# Plain gzip'd Image for boot.img
+		install -Dm644 "$builddir/arch/$_carch/boot/vmlinuz" \
+			"$pkgdir/boot/vmlinuz"
+	else
+		echo "WARNING: CONFIG_ZBOOT not enabled!"
+		install -Dm644 "$builddir/arch/$_carch/boot/Image.gz" \
+			"$pkgdir/boot/vmlinuz"
+	fi
+
+	make modules_install dtbs_install \
+		ARCH="$_carch" \
+		LLVM=1 \
+		INSTALL_PATH="$pkgdir"/boot/ \
+		INSTALL_MOD_PATH="$pkgdir/usr" \
+		INSTALL_MOD_STRIP=1 \
+		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs-tmp
+
+	mkdir -p "$pkgdir"/boot/dtbs/qcom
+	cp -r "$pkgdir"/boot/dtbs-tmp/qcom/sm8150* "$pkgdir"/boot/dtbs/qcom
+	rm -rf "$pkgdir"/boot/dtbs-tmp
+
+	rm -f "$pkgdir"/usr/lib/modules/*/build "$pkgdir"/usr/lib/modules/*/source
+
+	install -D "$builddir"/include/config/kernel.release \
+		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+}
+
+sha512sums="
+9a3e40443a59e83d664c47d6bd18fae20678d6409645e479b208842b362d800179294593419d224a88a9472dc94167a0e50fa437af52e12e9d195924dd2a578c  config-xiaomi-raphael.aarch64
+e56a9084ab3806bd015b31c8c2e8968a740c8fe028921a19f03b1aca2169d10354593d22a5792ec502156414e8c8e20beaaca8f0c4c24447e4404dd6050a8fa9  linux-xiaomi-raphael-8611da353242a435dacb39444c8d5912eac1d27b.tar.gz
+"

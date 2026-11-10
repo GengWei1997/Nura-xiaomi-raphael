@@ -1,0 +1,7 @@
+# iio-sensor-proxy with libssc: accelerometer mount matrix.
+#
+# The SLPI sensor process is only reachable over the FastRPC node, and the
+# registry reports the accelerometer rotated 180 degrees around Z from how
+# the panel is mounted, so state the correction instead of letting every
+# rotation come out upside down.
+SUBSYSTEM=="misc", KERNEL=="fastrpc-*", ENV{IIO_SENSOR_PROXY_TYPE}+="ssc-accel ssc-compass ssc-light ssc-proximity", ENV{ACCEL_MOUNT_MATRIX}+="-1, 0, 0; 0, -1, 0; 0, 0, 1"

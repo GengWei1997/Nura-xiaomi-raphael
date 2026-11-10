@@ -1,0 +1,85 @@
+# Reference: <https://postmarketos.org/devicepkg>
+maintainer="GengWei1997 <gw19970326@gmail.com>"
+pkgname=device-xiaomi-raphael
+pkgdesc="Xiaomi Mi 9T Pro / Redmi K20 Pro"
+pkgver=1
+pkgrel=0
+url="https://postmarketos.org"
+license="MIT"
+arch="aarch64"
+options="!check !archcheck"
+depends="
+	alsa-ucm-conf
+	firmware-xiaomi-raphael
+	hexagonrpcd
+	linux-xiaomi-raphael
+	mkbootimg
+	postmarketos-base
+	soc-qcom
+	soc-qcom-modem
+"
+makedepends="devicepkg-dev"
+
+# The ALSA files live under ucm2/ here because that is what they are; abuild
+# links a local source into $srcdir under its basename, so the names below
+# are the names that arrive there.
+source="
+	81-libssc-xiaomi-raphael.rules
+	99-wifi-powersave.conf
+	deviceinfo
+	50-xiaomi-raphael-fastrpc-suspend.sh
+	kernel-cmdline.conf
+	modprobe.d-wifi.conf
+	modules-initfs
+	ucm2/HiFi.conf
+	ucm2/raphael.conf
+"
+
+build() {
+	devicepkg_build $startdir $pkgname
+}
+
+package() {
+	devicepkg_package $startdir $pkgname
+
+	install -Dm644 "$srcdir"/81-libssc-xiaomi-raphael.rules \
+		-t "$pkgdir"/usr/lib/udev/rules.d/
+
+	# Stop the SDSP FastRPC server for suspend; see the script header for
+	# why the unit files cannot do this on their own.
+	install -Dm755 "$srcdir"/50-xiaomi-raphael-fastrpc-suspend.sh \
+		"$pkgdir"/usr/lib/systemd/system-sleep/50-xiaomi-raphael-fastrpc-suspend
+
+	install -Dm644 "$srcdir"/modprobe.d-wifi.conf \
+		"$pkgdir"/usr/lib/modprobe.d/wifi.conf
+
+	# NetworkManager's default powersave setting keeps the WLAN receiver
+	# asleep between beacons, which on the WCN3990 costs about ten extra
+	# milliseconds on most packets.  Override it for this device.
+	install -Dm644 "$srcdir"/99-wifi-powersave.conf \
+		"$pkgdir"/usr/lib/NetworkManager/conf.d/99-wifi-powersave.conf
+
+	# ALSA use case manager files for the SM8150 sound card.  The verb is
+	# named raphael.conf and the conf.d entry points at it, so alsa-lib finds
+	# it by the card's driver name (sm8150) and the verb by its own name.
+	install -Dm644 "$srcdir"/HiFi.conf \
+		"$pkgdir"/usr/share/alsa/ucm2/Qualcomm/raphael/HiFi.conf
+	install -Dm644 "$srcdir"/raphael.conf \
+		"$pkgdir"/usr/share/alsa/ucm2/Qualcomm/raphael/raphael.conf
+
+	mkdir -p "$pkgdir"/usr/share/alsa/ucm2/conf.d/sm8150/
+	ln -s ../../Qualcomm/raphael/raphael.conf \
+		"$pkgdir"/usr/share/alsa/ucm2/conf.d/sm8150/sm8150.conf
+}
+
+sha512sums="
+6c3ad31fd9b7ee1fce392551454dd07fa26a2adf30d7114c7bceb624042221de0c4dc91208556c5c61d41c42b254baa15fbbc4bf40330ebf13c8bb01de6f528d  81-libssc-xiaomi-raphael.rules
+62859ed01a0a17f71526d7c7622f9bea66b05befe35f6aa70c9a0dcd393c2034cacc41974cc9a337256c90c1de02754cf264b225cecbe87649aee21940fdf96a  99-wifi-powersave.conf
+6f4c6bd081935268f45f4bf487cd3282825c109423dc42537d839e04ae7a6b236d3394907e6517821c80585a899f814c5e76c0a230f087d58df44579bfbcb14f  deviceinfo
+9c2738548cc248586e22e93d367710b8a0174d4b83ec9248132dd33637450cde5faa2f9ff7faeb9e2f5fb8827e3339e82a26469de9c9a8e10c8163d9a910cb2c  50-xiaomi-raphael-fastrpc-suspend.sh
+003e5228a2b2825f24cb8b4842e3c3f72b99225f0aef3cda5bb2de4e4beb5e1c84800ba48c6cf1b84fe042bd039912e67c545c00981b604db0c0f0bcb546f7c5  kernel-cmdline.conf
+782e86194f4d4d0ee572a857c9b987d66e8bb5e34118ee050b992f366297dcbf87c40de8ef491c6c46a37c32fc8e22bc19757e349da332ccc427323efb8c9807  modprobe.d-wifi.conf
+655613773921a9be28d71ba4595978a653c001301587e03fc98adfe7e83080d267e4dc41b8920c66647b3389e8288a4e2160c0e92c1105d50e10137d3a83011f  modules-initfs
+ee6d66de743fea03d8961a62adb6e565e9365e6a699e5e8a3cca088dc66c721d91bc8a6ddd5d596d129b91b1855dbd88e0c365f4b4ca1bbb9b67b34510d134ca  HiFi.conf
+11b9e0b3aa96e5d0523b763263343164ac726667a8a6dabb8d7de5eab885d77125bcc8a75164ebf26f16016f06008e0f9e183aa1a8a1c764122e8063aa2d31fe  raphael.conf
+"

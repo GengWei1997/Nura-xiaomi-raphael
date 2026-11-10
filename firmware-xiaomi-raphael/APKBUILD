@@ -1,0 +1,79 @@
+# Reference: <https://postmarketos.org/firmwarepkg>
+maintainer="GengWei1997 <gw19970326@gmail.com>"
+pkgname=firmware-xiaomi-raphael
+pkgver=1
+pkgrel=0
+pkgdesc="Firmware for Xiaomi Mi 9T Pro / Redmi K20 Pro"
+url="https://nura.eco"
+arch="aarch64"
+license="proprietary"
+options="!check !strip !archcheck !tracedeps"
+
+# The files were extracted from the device's own vendor partitions (sde53
+# android/vendor, sde52 modem, sde26 bluetooth) and are signed against a
+# per-device key, so no public upstream exists.  They live in their own
+# repository and are pinned by commit like any other source.
+#
+# The archive mirrors the install paths, so packaging is a plain copy:
+#
+#   lib/firmware/qcom/sm8150/Xiaomi/raphael/   ADSP, IPA, modem, WLAN, zap, PDC/mcfg
+#   lib/firmware/ath10k/WCN3990/hw1.0/         WLAN board data and firmware
+#   lib/firmware/qca/                          Bluetooth firmware
+#   usr/share/qcom/                            the hexagonrpcd root
+#
+# Bump _commit, then update the source line and regenerate the checksum with
+# `abuild checksum`.  GitHub builds archives on demand, so the digest can only
+# be taken after the commit is pushed.
+_commit="137fd06491364b7cd5f9a9e5798c59bfa80274d7"
+_url="https://github.com/GengWei1997/firmware-xiaomi-raphael"
+source="
+	$pkgname-$_commit.tar.gz::$_url/archive/$_commit.tar.gz
+	30-initramfs-firmware-xiaomi-raphael.files
+"
+builddir="$srcdir/$pkgname-$_commit"
+
+# The hexagonrpcd root keeps the names the DSP asks for, because
+# hexagonrpcd remaps the Android paths onto them (see rpcd_builder.c):
+#
+#   acdb/                 <- /vendor/etc/acdbdata/
+#   dsp/adsp/             <- /usr/lib/qcom/adsp/
+#   dsp/sdsp/
+#   sensors/config/       <- /vendor/etc/sensors/config/
+#   sensors/registry/     <- /mnt/vendor/persist/sensors/registry/
+#   sensors/sns_reg.conf  <- /vendor/etc/sensors/sns_reg_config
+#
+# modem_pr/ is the modem's own PDC/mcfg database.  It lives in a
+# subdirectory of the firmware directory named by the modem's firmware-name,
+# and tqftpserv serves it to the modem over QRTR TFTP when the modem asks
+# for /readonly/firmware/image/modem_pr/... .  Both .dig index files are
+# requested during boot, which is how the carrier profiles in the software
+# list get their settings.  Note that --pdc-list-configs=platform stays at
+# zero even with it in place; that list is for platform configurations the
+# modem synthesises itself, and their absence does not stop data from
+# working.
+#
+# hexagonrpcd looks below /usr/share/qcom/<soc>/<vendor>/<name> first, but
+# only when that directory exists; otherwise it serves the tree one level up,
+# which is where these live.  Keeping them at /usr/share/qcom means the
+# shipped unit files need no override at all.
+package() {
+	local f rel
+	for f in $(find "$builddir" -type f); do
+		rel=${f#"$builddir/"}
+		case "$rel" in
+		lib/*) install -Dm644 "$f" "$pkgdir/usr/$rel" ;;
+		usr/*) install -Dm644 "$f" "$pkgdir/$rel" ;;
+		esac
+	done
+
+	# The Adreno firmware is requested while the panel is still coming up in
+	# the initramfs, long before the rootfs is mounted, so it has to be part
+	# of the initramfs like postmarketOS does it for the other Adreno SoCs.
+	install -Dm644 "$srcdir"/30-initramfs-firmware-xiaomi-raphael.files \
+		-t "$pkgdir"/usr/share/mkinitfs/files
+}
+
+sha512sums="
+90f7b1f506941e06158544859862596de3c7d897fd10c3ffa17754b515333423e7b9bac870812900437b04348992c471fe5601d331f10fc8aa7a306697c6f16f  firmware-xiaomi-raphael-137fd06491364b7cd5f9a9e5798c59bfa80274d7.tar.gz
+4a6cc9cdc0bfd0dc2aec5c46fedcf1e3ba6e0b4ed7d35c8b6cb9f4874c480b12cc07bed1bd93362c0f515aa25cd622dc6a15090b1f856510289887fbd698234b  30-initramfs-firmware-xiaomi-raphael.files
+"
